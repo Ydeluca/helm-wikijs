@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wikijs.fullname" . }}
+  labels:
+{{ include "wikijs.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "wikijs.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "wikijs.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: DB_TYPE
+            value: postgres
+          - name: DB_HOST
+            value: "{{ template "wikijs.database.fullname" . }}"
+          - name: DB_PORT
+            value: "{{ .Values.global.postgresql.postgresqlPort }}"
+          - name: DB_USER
+            value: "{{ .Values.global.postgresql.postgresqlUsername }}"
+          - name: DB_PASS
+            value: "{{ .Values.global.postgresql.postgresqlPassword }}"
+          - name: DB_NAME
+            value: "{{ .Values.global.postgresql.postgresqlDatabase }}"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data/repo
+            #- name: config-volume
+              #mountPath: /conf/config.yml
+              #subPath: config.yml
+          #postStart:
+            #exec:
+              #command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+
+      volumes:
+        #- name: config-volume
+          #configMap:
+            ## Provide the name of the ConfigMap containing the files you want
+            ## to add to the container
+            #name: {{ template "wikijs.fullname" . }}-config
+        - name: data
+          {{- if .Values.persistentVolumeClaim.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "wikijs.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
